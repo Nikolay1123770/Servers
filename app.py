@@ -19,15 +19,16 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Flask приложение
+# Flask приложение с ИСПРАВЛЕННЫМИ настройками
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'deploy-manager-pro-secret-key'
 
 # Конфигурация
 PROJECTS_DIR = "/app/projects"
 CONFIG_FILE = "/app/config/config.json"
 LOG_FILE = "/app/config/deploy.log"
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8035930401:AAHU8hSEUc1pCav8-_GOHWkWLPC5yXR5FRc')
-ADMIN_IDS = [8473513085]
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7966969765:AAEZLNOFRmv2hPJ8fQaE3u2KSPsoxreDn-E')
+ADMIN_IDS = [1769269442]
 
 # Создаём директории
 os.makedirs(PROJECTS_DIR, exist_ok=True)
@@ -40,6 +41,20 @@ dp = Dispatcher()
 # Глобальные переменные
 user_states = {}
 flask_running = False
+
+# === MIDDLEWARE ДЛЯ ЛОГИРОВАНИЯ ЗАПРОСОВ ===
+@app.before_request
+def log_request_info():
+    logger.info(f"🌐 HTTP запрос: {request.method} {request.path} от {request.remote_addr}")
+
+@app.after_request
+def log_response_info(response):
+    logger.info(f"📤 HTTP ответ: {response.status_code} для {request.path}")
+    # Добавляем CORS заголовки
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 # === ФУНКЦИИ БЕЗ GIT ===
 
@@ -122,8 +137,6 @@ def download_repo_from_github(repo_url, branch="main", target_dir=None):
         logger.error(f"ОШИБКА скачивания: {str(e)}")
         raise e
 
-# === ФУНКЦИИ КОНФИГУРАЦИИ ===
-
 def load_config():
     try:
         if os.path.exists(CONFIG_FILE):
@@ -181,7 +194,7 @@ async def cmd_start(message: types.Message):
     response_text = safe_message_send(
         "🚀 <b>Deploy Manager Pro</b>\n\n"
         "Система управления деплоем!\n"
-        "✅ BotHost совместимая v3.1\n"
+        "✅ BotHost совместимая v3.2\n"
         "✅ HTTP API без Git\n\n"
         "Выберите действие:"
     )
@@ -481,7 +494,7 @@ async def show_stats(callback: CallbackQuery):
         f"🕐 <b>Время:</b> {datetime.now().strftime('%H:%M:%S')}\n"
         f"📅 <b>Дата:</b> {datetime.now().strftime('%d.%m.%Y')}\n\n"
         f"🌐 <b>Панель:</b> server.bothost.py\n"
-        f"💡 <b>Версия:</b> v3.1",
+        f"💡 <b>Версия:</b> v3.2",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="🔄 Обновить", callback_data="stats"),
@@ -529,125 +542,435 @@ async def back_to_main(callback: CallbackQuery):
     
     await callback.message.edit_text(
         "🚀 <b>Deploy Manager Pro</b>\n\n"
-        "Система управления деплоем v3.1\n\n"
+        "Система управления деплоем v3.2\n\n"
         "Выберите действие:",
         parse_mode="HTML",
         reply_markup=keyboard.as_markup()
     )
 
-# === FLASK ROUTES (упрощенные) ===
+# === FLASK ROUTES ===
 
 @app.route('/')
 def index():
-    return """
-    <html>
-    <head>
-        <title>Deploy Manager Pro v3.1</title>
-        <meta charset="utf-8">
-        <style>
-            body { 
-                font-family: Arial; 
-                background: linear-gradient(135deg, #667eea, #764ba2); 
-                margin: 0; 
-                padding: 20px; 
-                color: white;
-            }
-            .container { 
-                max-width: 800px; 
-                margin: 0 auto; 
-                background: white; 
-                padding: 30px; 
-                border-radius: 15px; 
-                color: #333;
-            }
-            h1 { color: #333; margin-bottom: 20px; }
-            .status { 
-                background: #28a745; 
-                color: white; 
-                padding: 15px; 
-                border-radius: 5px; 
-                margin: 20px 0; 
-                text-align: center;
-            }
-            .info { 
-                background: #f8f9fa; 
-                padding: 15px; 
-                border-radius: 5px; 
-                margin: 20px 0; 
-            }
-            button { 
-                background: #667eea; 
-                color: white; 
-                border: none; 
-                padding: 12px 20px; 
-                border-radius: 5px; 
-                cursor: pointer; 
-                margin: 5px;
-            }
-            input { 
-                padding: 10px; 
-                border: 1px solid #ddd; 
-                border-radius: 5px; 
-                margin: 5px; 
-                width: 300px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 Deploy Manager Pro v3.1</h1>
-            
-            <div class="status">
-                ✅ Система работает!
-            </div>
-            
-            <div class="info">
+    logger.info("🏠 Загрузка главной страницы")
+    try:
+        return render_template_string("""
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deploy Manager Pro v3.2</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: white;
+        }
+        .container { 
+            max-width: 1000px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 15px; 
+            color: #333;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { 
+            color: #333; 
+            margin-bottom: 20px; 
+            text-align: center;
+            font-size: 2.5em;
+        }
+        .status { 
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white; 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin: 20px 0; 
+            text-align: center;
+            font-size: 1.2em;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .card { 
+            background: #f8f9fa; 
+            padding: 20px; 
+            border-radius: 10px; 
+            border-left: 5px solid #667eea;
+        }
+        .card h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .card p {
+            color: #666;
+            margin: 8px 0;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+        button, .btn { 
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        button:hover, .btn:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .btn-success { background: linear-gradient(135deg, #28a745, #20c997); }
+        .btn-info { background: linear-gradient(135deg, #17a2b8, #138496); }
+        .btn-warning { background: linear-gradient(135deg, #ffc107, #e0a800); }
+        
+        .deploy-form {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        input[type="text"] { 
+            width: 100%;
+            padding: 12px; 
+            border: 2px solid #ddd; 
+            border-radius: 8px; 
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .projects-list {
+            margin-top: 20px;
+        }
+        .project-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #667eea;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            .container { margin: 10px; padding: 20px; }
+            .grid { grid-template-columns: 1fr; }
+            .button-group { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Deploy Manager Pro v3.2</h1>
+        
+        <div class="status">
+            ✅ Система успешно запущена и работает!
+        </div>
+        
+        <div class="grid">
+            <div class="card">
                 <h3>📱 Telegram Bot</h3>
-                <p>Отправьте <code>/start</code> боту для управления</p>
-                <p><strong>Функции:</strong></p>
+                <p><strong>@RegisterMarketPlace_bot</strong></p>
+                <p>Отправьте <code>/start</code> боту для полного управления</p>
                 <ul>
                     <li>📦 Управление проектами</li>
                     <li>🚀 Деплой из GitHub</li>
                     <li>🔄 Обновление проектов</li>
-                    <li>📊 Статистика и логи</li>
+                    <li>📊 Статистика и мониторинг</li>
                 </ul>
             </div>
             
-            <div class="info">
-                <h3>🌐 Веб API</h3>
+            <div class="card">
+                <h3>🌐 HTTP API</h3>
                 <p><strong>Доступные endpoints:</strong></p>
                 <ul>
                     <li><code>GET /api/projects</code> - Список проектов</li>
                     <li><code>GET /api/logs</code> - Логи системы</li>
+                    <li><code>GET /health</code> - Статус</li>
                     <li><code>POST /webhook</code> - GitHub webhook</li>
                 </ul>
             </div>
             
-            <div style="text-align: center; margin-top: 30px;">
-                <button onclick="location.reload()">🔄 Обновить</button>
-                <button onclick="window.open('/api/projects')">📦 API Проекты</button>
-                <button onclick="window.open('/api/logs')">📋 Логи</button>
-            </div>
-            
-            <div style="margin-top: 20px; text-align: center; color: #666;">
-                <p>Deploy Manager Pro v3.1 - BotHost Compatible</p>
-                <p>Работает на HTTP API без Git клиента</p>
+            <div class="card">
+                <h3>⚙️ Возможности</h3>
+                <ul>
+                    <li>🔗 GitHub репозитории (HTTP API)</li>
+                    <li>📦 Автоустановка зависимостей</li>
+                    <li>🔄 Автообновление через webhooks</li>
+                    <li>📋 Полное логирование</li>
+                    <li>🤖 Telegram управление</li>
+                    <li>🌐 Веб-интерфейс</li>
+                </ul>
             </div>
         </div>
-    </body>
-    </html>
-    """
+        
+        <div class="deploy-form">
+            <h3>🚀 Быстрый деплой</h3>
+            <p>Деплой проекта напрямую через веб-форму:</p>
+            
+            <div class="form-group">
+                <label for="projectName">Название проекта:</label>
+                <input type="text" id="projectName" placeholder="my-awesome-bot">
+            </div>
+            
+            <div class="form-group">
+                <label for="repoUrl">GitHub URL:</label>
+                <input type="text" id="repoUrl" placeholder="https://github.com/username/repo.git">
+            </div>
+            
+            <div class="form-group">
+                <label for="branch">Ветка (по умолчанию main):</label>
+                <input type="text" id="branch" placeholder="main" value="main">
+            </div>
+            
+            <button onclick="deployProject()" class="btn">🚀 Запустить деплой</button>
+            
+            <div id="deployStatus" style="margin-top: 15px;"></div>
+        </div>
+        
+        <div class="button-group">
+            <button onclick="loadProjects()" class="btn btn-success">📦 Загрузить проекты</button>
+            <button onclick="viewLogs()" class="btn btn-info">📋 Показать логи</button>
+            <button onclick="checkHealth()" class="btn btn-warning">🏥 Проверить статус</button>
+            <a href="/api/projects" class="btn" target="_blank">📊 API Проекты</a>
+        </div>
+        
+        <div id="content"></div>
+        
+        <div class="footer">
+            <p><strong>Deploy Manager Pro v3.2</strong></p>
+            <p>BotHost Compatible • HTTP API • No Git Required</p>
+            <p>Powered by Flask + aiogram</p>
+        </div>
+    </div>
+
+    <script>
+        function deployProject() {
+            const projectName = document.getElementById('projectName').value.trim();
+            const repoUrl = document.getElementById('repoUrl').value.trim();
+            const branch = document.getElementById('branch').value.trim() || 'main';
+            
+            if (!projectName || !repoUrl) {
+                showStatus('❌ Заполните все обязательные поля', 'error');
+                return;
+            }
+            
+            if (!repoUrl.includes('github.com')) {
+                showStatus('❌ Поддерживается только GitHub', 'error');
+                return;
+            }
+            
+            showStatus('🔄 Деплой начат...', 'info');
+            
+            fetch('/api/deploy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_name: projectName,
+                    repo_url: repoUrl,
+                    branch: branch
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    showStatus('❌ ' + data.error, 'error');
+                } else {
+                    showStatus('✅ ' + data.message, 'success');
+                    document.getElementById('projectName').value = '';
+                    document.getElementById('repoUrl').value = '';
+                }
+            })
+            .catch(err => showStatus('❌ Ошибка: ' + err.message, 'error'));
+        }
+        
+        function loadProjects() {
+            showStatus('🔄 Загрузка проектов...', 'info');
+            
+            fetch('/api/projects')
+            .then(r => r.json())
+            .then(data => {
+                let html = '<div class="projects-list"><h3>📦 Проекты:</h3>';
+                
+                if (Object.keys(data).length === 0) {
+                    html += '<p>Пока нет проектов</p>';
+                } else {
+                    for (const [name, info] of Object.entries(data)) {
+                        html += `
+                            <div class="project-item">
+                                <h4>${name}</h4>
+                                <p><strong>Репозиторий:</strong> ${info.repo_url}</p>
+                                <p><strong>Ветка:</strong> ${info.branch}</p>
+                                <p><strong>Обновлено:</strong> ${info.last_update || 'Никогда'}</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                html += '</div>';
+                document.getElementById('content').innerHTML = html;
+                showStatus('✅ Проекты загружены', 'success');
+            })
+            .catch(err => showStatus('❌ Ошибка загрузки: ' + err.message, 'error'));
+        }
+        
+        function viewLogs() {
+            showStatus('🔄 Загрузка логов...', 'info');
+            
+            fetch('/api/logs')
+            .then(r => r.text())
+            .then(data => {
+                document.getElementById('content').innerHTML = 
+                    '<div class="card"><h3>📋 Логи системы:</h3><pre style="background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; max-height: 400px; overflow-y: auto;">' + 
+                    (data || 'Логи пусты') + 
+                    '</pre></div>';
+                showStatus('✅ Логи загружены', 'success');
+            })
+            .catch(err => showStatus('❌ Ошибка: ' + err.message, 'error'));
+        }
+        
+        function checkHealth() {
+            fetch('/health')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('content').innerHTML = 
+                    '<div class="card"><h3>🏥 Статус системы:</h3><pre>' + 
+                    JSON.stringify(data, null, 2) + 
+                    '</pre></div>';
+                showStatus('✅ Статус получен', 'success');
+            })
+            .catch(err => showStatus('❌ Ошибка: ' + err.message, 'error'));
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('deployStatus');
+            const colors = {
+                'success': '#28a745',
+                'error': '#dc3545',
+                'info': '#17a2b8'
+            };
+            
+            statusDiv.innerHTML = `<div style="padding: 10px; background: ${colors[type] || '#17a2b8'}; color: white; border-radius: 5px; margin-top: 10px;">${message}</div>`;
+            
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+        
+        // Автозагрузка статуса при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            checkHealth();
+        });
+    </script>
+</body>
+</html>
+        """)
+    except Exception as e:
+        logger.error(f"Ошибка загрузки главной страницы: {e}")
+        return f"<h1>Ошибка: {str(e)}</h1>", 500
+
+@app.route('/api/deploy', methods=['POST'])
+def api_deploy():
+    logger.info("🚀 API деплой запрос")
+    try:
+        data = request.json
+        repo_url = data.get('repo_url')
+        project_name = data.get('project_name')
+        branch = data.get('branch', 'main')
+        
+        if not repo_url or not project_name:
+            return jsonify({"error": "Не указаны repo_url и project_name"}), 400
+        
+        if "github.com" not in repo_url:
+            return jsonify({"error": "Поддерживается только GitHub"}), 400
+        
+        project_path = os.path.join(PROJECTS_DIR, project_name)
+        
+        if os.path.exists(project_path):
+            log_action(f"WEB: Обновление проекта: {project_name}")
+            download_repo_from_github(repo_url, branch, project_path)
+            action = "обновлен"
+        else:
+            log_action(f"WEB: Деплой проекта: {project_name}")
+            os.makedirs(project_path, exist_ok=True)
+            download_repo_from_github(repo_url, branch, project_path)
+            action = "задеплоен"
+        
+        req_file = os.path.join(project_path, 'requirements.txt')
+        if os.path.exists(req_file):
+            log_action(f"Установка зависимостей для {project_name}")
+            subprocess.run(['pip', 'install', '-r', req_file])
+        
+        config = load_config()
+        config['projects'][project_name] = {
+            'repo_url': repo_url,
+            'branch': branch,
+            'path': project_path,
+            'last_update': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        save_config(config)
+        
+        return jsonify({
+            "status": "success",
+            "action": action,
+            "project": project_name,
+            "message": f"Проект {project_name} успешно {action}!"
+        })
+    
+    except Exception as e:
+        logger.error(f"ОШИБКА API деплоя: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/projects')
 def api_projects():
+    logger.info("📦 API запрос проектов")
     try:
         config = load_config()
         return jsonify(config.get('projects', {}))
     except Exception as e:
+        logger.error(f"Ошибка API проектов: {e}")
         return jsonify({"error": str(e)})
 
 @app.route('/api/logs')
 def api_logs():
+    logger.info("📋 API запрос логов")
     try:
         if os.path.exists(LOG_FILE):
             with open(LOG_FILE, 'r', encoding='utf-8') as f:
@@ -655,10 +978,29 @@ def api_logs():
             return content[-5000:]  # Последние 5000 символов
         return "Логи пусты"
     except Exception as e:
+        logger.error(f"Ошибка API логов: {e}")
         return f"Ошибка чтения логов: {str(e)}"
+
+@app.route('/health')
+def health():
+    logger.info("🏥 Проверка здоровья")
+    config = load_config()
+    return jsonify({
+        "status": "ok", 
+        "version": "3.2",
+        "flask_running": flask_running,
+        "projects_count": len(config.get('projects', {})),
+        "timestamp": datetime.now().isoformat(),
+        "bot_token_set": bool(BOT_TOKEN),
+        "directories_exist": {
+            "projects": os.path.exists(PROJECTS_DIR),
+            "config": os.path.exists(os.path.dirname(CONFIG_FILE))
+        }
+    })
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    logger.info("🪝 GitHub webhook")
     try:
         data = request.json
         repo_url = data.get('repository', {}).get('clone_url')
@@ -674,27 +1016,33 @@ def webhook():
         
         return jsonify({"status": "no matching project"}), 404
     except Exception as e:
+        logger.error(f"Ошибка webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/health')
-def health():
-    return jsonify({"status": "ok", "version": "3.1", "flask_running": flask_running})
-
-# === ЗАПУСК (исправленный) ===
+# === ЗАПУСК (ИСПРАВЛЕННЫЙ для BotHost) ===
 
 def run_flask():
     global flask_running
     try:
         logger.info("🌐 Запуск Flask сервера...")
         flask_running = True
-        app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False, threaded=True)
+        
+        # ИСПРАВЛЕННЫЕ настройки для BotHost
+        app.run(
+            host='0.0.0.0',           # Принимаем соединения от всех
+            port=8080,                # Стандартный порт BotHost
+            debug=False,              # Без отладки
+            use_reloader=False,       # Без перезагрузки
+            threaded=True,            # Многопоточность
+            processes=1               # Один процесс
+        )
     except Exception as e:
         logger.error(f"Ошибка Flask: {e}")
         flask_running = False
 
 async def main():
     try:
-        log_action("🚀 Deploy Manager Pro v3.1 запущен")
+        log_action("🚀 Deploy Manager Pro v3.2 запущен")
         
         # Запускаем Flask
         flask_thread = threading.Thread(target=run_flask)
