@@ -4,9 +4,11 @@ import os
 import json
 import shutil
 from datetime import datetime
-import git
 import threading
 import asyncio
+import requests
+import zipfile
+import tempfile
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
@@ -23,8 +25,8 @@ app = Flask(__name__)
 PROJECTS_DIR = "/app/projects"
 CONFIG_FILE = "/app/config/config.json"
 LOG_FILE = "/app/config/deploy.log"
-BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')  # Укажите ваш токен бота
-ADMIN_IDS = [123456789]  # Укажите ваши Telegram ID (можно несколько)
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7966969765:AAEZLNOFRmv2hPJ8fQaE3u2KSPsoxreDn-E')  # Ваш токен
+ADMIN_IDS = [1769269442]  # Ваш Telegram ID
 
 # Создаём директории
 os.makedirs(PROJECTS_DIR, exist_ok=True)
@@ -36,6 +38,95 @@ dp = Dispatcher()
 
 # Глобальные переменные для состояний
 user_states = {}
+
+# === ФУНКЦИИ БЕЗ GIT ===
+
+def download_repo_from_github(repo_url, branch="main", target_dir=None):
+    """Скачивание репозитория через GitHub API без Git"""
+    try:
+        # Парсим URL GitHub
+        if "github.com" not in repo_url:
+            raise Exception("Поддерживается только GitHub")
+        
+        # Извлекаем username и repo name
+        parts = repo_url.replace("https://github.com/", "").replace(".git", "").split("/")
+        if len(parts) < 2:
+            raise Exception("Неверный формат URL")
+        
+        username, repo_name = parts[0], parts[1]
+        
+        # URL для скачивания zip архива
+        zip_url = f"https://github.com/{username}/{repo_name}/archive/refs/heads/{branch}.zip"
+        
+        log_action(f"Скачивание из {zip_url}")
+        
+        # Скачиваем архив
+        response = requests.get(zip_url, timeout=30)
+        if response.status_code != 200:
+            raise Exception(f"Не удалось скачать репозиторий. HTTP {response.status_code}")
+        
+        # Создаём временный файл
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_file:
+            temp_file.write(response.content)
+            temp_zip_path = temp_file.name
+        
+        # Распаковываем архив
+        with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+            # Создаём временную директорию для распаковки
+            with tempfile.TemporaryDirectory() as temp_extract_dir:
+                zip_ref.extractall(temp_extract_dir)
+                
+                # Находим папку с содержимым (обычно repo-name-branch)
+                extracted_folders = os.listdir(temp_extract_dir)
+                if not extracted_folders:
+                    raise Exception("Пустой архив")
+                
+                source_dir = os.path.join(temp_extract_dir, extracted_folders[0])
+                
+                # Создаём целевую директорию если её нет
+                if target_dir and not os.path.exists(target_dir):
+                    os.makedirs(target_dir)
+                
+                # Копируем файлы
+                if target_dir:
+                    # Очищаем целевую директорию
+                    for item in os.listdir(target_dir):
+                        item_path = os.path.join(target_dir, item)
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            os.remove(item_path)
+                    
+                    # Копируем новые файлы
+                    for item in os.listdir(source_dir):
+                        source_item = os.path.join(source_dir, item)
+                        target_item = os.path.join(target_dir, item)
+                        if os.path.isdir(source_item):
+                            shutil.copytree(source_item, target_item)
+                        else:
+                            shutil.copy2(source_item, target_item)
+                else:
+                    target_dir = source_dir
+        
+        # Удаляем временный zip файл
+        os.unlink(temp_zip_path)
+        
+        log_action(f"Репозиторий успешно скачан в {target_dir}")
+        return True
+        
+    except Exception as e:
+        log_action(f"ОШИБКА скачивания репозитория: {str(e)}")
+        raise e
+
+def parse_github_url(url):
+    """Извлечение информации из GitHub URL"""
+    try:
+        if "github.com" in url:
+            parts = url.replace("https://github.com/", "").replace(".git", "").split("/")
+            return parts[0], parts[1]  # username, repo
+        return None, None
+    except:
+        return None, None
 
 # === ФУНКЦИИ КОНФИГУРАЦИИ ===
 def load_config():
@@ -79,6 +170,8 @@ async def cmd_start(message: types.Message):
     await message.answer(
         "🚀 <b>Deploy Manager Pro</b>\n\n"
         "Добро пожаловать в систему управления деплоем!\n"
+        "✅ BotHost совместимая версия\n"
+        "✅ Работает без Git через HTTP API\n\n"
         "Выберите действие:",
         parse_mode="HTML",
         reply_markup=keyboard.as_markup()
@@ -170,12 +263,13 @@ async def update_project(callback: CallbackQuery):
         config = load_config()
         project = config['projects'][project_name]
         project_path = project['path']
+        repo_url = project['repo_url']
+        branch = project['branch']
         
         log_action(f"Telegram Bot: Обновление проекта {project_name}")
         
-        repo = git.Repo(project_path)
-        origin = repo.remotes.origin
-        origin.pull()
+        # Скачиваем обновления через HTTP API
+        download_repo_from_github(repo_url, branch, project_path)
         
         # Обновляем зависимости
         req_file = os.path.join(project_path, 'requirements.txt')
@@ -290,8 +384,9 @@ async def handle_deploy_steps(message: types.Message):
         await message.answer(
             "📦 <b>Деплой нового проекта</b>\n\n"
             f"✅ Название: <code>{state['project_name']}</code>\n\n"
-            "Шаг 2/3: Введите URL Git репозитория\n\n"
-            "Пример: <code>https://github.com/user/repo.git</code>",
+            "Шаг 2/3: Введите URL GitHub репозитория\n\n"
+            "Пример: <code>https://github.com/user/repo.git</code>\n"
+            "⚠️ Поддерживается только GitHub!",
             parse_mode="HTML"
         )
         
@@ -324,7 +419,7 @@ async def deploy_main_branch(callback: CallbackQuery):
 
 async def start_deploy(message, state):
     try:
-        await message.answer("🔄 <b>Деплой начат...</b>\n\nПожалуйста, подождите...", parse_mode="HTML")
+        await message.answer("🔄 <b>Деплой начат...</b>\n\nСкачивание через HTTP API...", parse_mode="HTML")
         
         project_name = state["project_name"]
         repo_url = state["repo_url"]
@@ -332,22 +427,32 @@ async def start_deploy(message, state):
         
         project_path = os.path.join(PROJECTS_DIR, project_name)
         
-        # Клонируем репозиторий
+        # Проверяем что это GitHub
+        if "github.com" not in repo_url:
+            raise Exception("Поддерживается только GitHub")
+        
+        # Скачиваем репозиторий
         if os.path.exists(project_path):
             log_action(f"Telegram Bot: Обновление проекта {project_name}")
-            repo = git.Repo(project_path)
-            origin = repo.remotes.origin
-            origin.pull()
+            download_repo_from_github(repo_url, branch, project_path)
             action = "обновлен"
         else:
             log_action(f"Telegram Bot: Клонирование проекта {project_name}")
-            git.Repo.clone_from(repo_url, project_path, branch=branch)
+            os.makedirs(project_path, exist_ok=True)
+            download_repo_from_github(repo_url, branch, project_path)
             action = "задеплоен"
         
         # Устанавливаем зависимости
         req_file = os.path.join(project_path, 'requirements.txt')
         if os.path.exists(req_file):
-            subprocess.run(['pip', 'install', '-r', req_file])
+            log_action(f"Установка зависимостей для {project_name}")
+            result = subprocess.run(
+                ['pip', 'install', '-r', req_file],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                log_action(f"Предупреждение установки зависимостей: {result.stderr}")
         
         # Сохраняем конфигурацию
         config = load_config()
@@ -368,7 +473,8 @@ async def start_deploy(message, state):
             f"🔗 <b>Репозиторий:</b> {repo_url}\n"
             f"🌿 <b>Ветка:</b> {branch}\n"
             f"📁 <b>Путь:</b> {project_path}\n"
-            f"🕐 <b>Время:</b> {datetime.now().strftime('%H:%M:%S')}",
+            f"🕐 <b>Время:</b> {datetime.now().strftime('%H:%M:%S')}\n"
+            f"💡 <b>Метод:</b> HTTP API (BotHost совместимо)",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="📦 Мои проекты", callback_data="list_projects"),
@@ -411,7 +517,9 @@ async def show_stats(callback: CallbackQuery):
         f"🔄 <b>Обновлено сегодня:</b> {today_updates}\n"
         f"🕐 <b>Текущее время:</b> {datetime.now().strftime('%H:%M:%S')}\n"
         f"📅 <b>Дата:</b> {datetime.now().strftime('%d.%m.%Y')}\n\n"
-        "🌐 <b>Веб-панель:</b> server.bothost.py",
+        f"🌐 <b>Веб-панель:</b> server.bothost.py\n"
+        f"💡 <b>Версия:</b> BotHost Compatible v2.0\n"
+        f"🔧 <b>Метод:</b> HTTP API (без Git)",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="🔄 Обновить", callback_data="stats"),
@@ -479,12 +587,14 @@ async def back_to_main(callback: CallbackQuery):
     await callback.message.edit_text(
         "🚀 <b>Deploy Manager Pro</b>\n\n"
         "Добро пожаловать в систему управления деплоем!\n"
+        "✅ BotHost совместимая версия\n"
+        "✅ Работает без Git через HTTP API\n\n"
         "Выберите действие:",
         parse_mode="HTML",
         reply_markup=keyboard.as_markup()
     )
 
-# === FLASK APP (тот же HTML Template) ===
+# === FLASK ROUTES ===
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -492,7 +602,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deploy Manager Pro</title>
+    <title>Deploy Manager Pro - BotHost</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -518,6 +628,14 @@ HTML_TEMPLATE = '''
             color: #666;
             margin-bottom: 20px;
             font-size: 1.1em;
+        }
+        .bothost-info {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
         }
         .telegram-info {
             background: linear-gradient(135deg, #0088cc 0%, #005f8a 100%);
@@ -701,11 +819,16 @@ HTML_TEMPLATE = '''
 <body>
     <div class="container">
         <h1>🚀 Deploy Manager Pro</h1>
-        <p class="subtitle">Управление деплоем проектов, ботов и сайтов</p>
+        <p class="subtitle">Управление деплоем проектов на BotHost</p>
+        
+        <div class="bothost-info">
+            <h3>✅ BotHost Compatible Version</h3>
+            <p>Работает без Git через HTTP API • Совместимо с ограничениями BotHost</p>
+        </div>
         
         <div class="telegram-info">
             <h3>📱 Telegram Bot доступен!</h3>
-            <p>Управляйте деплоем через Telegram: <strong>@YourBotUsername</strong></p>
+            <p>Управляйте деплоем через Telegram</p>
             <p>Команды: /start - главное меню</p>
         </div>
         
@@ -719,8 +842,8 @@ HTML_TEMPLATE = '''
                 <div class="stat-label">Последнее обновление</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">🤖</div>
-                <div class="stat-label">Telegram Bot Активен</div>
+                <div class="stat-number">🌐</div>
+                <div class="stat-label">HTTP API</div>
             </div>
         </div>
         
@@ -728,17 +851,18 @@ HTML_TEMPLATE = '''
             <h2>📦 Деплой нового проекта</h2>
             <div class="form-group">
                 <input type="text" id="projectName" placeholder="Название проекта" class="input-medium">
-                <input type="text" id="repoUrl" placeholder="Git Repository URL" class="input-large">
+                <input type="text" id="repoUrl" placeholder="GitHub Repository URL" class="input-large">
                 <input type="text" id="branch" placeholder="Branch (main)" class="input-small">
                 <button onclick="deployProject()" class="btn-primary">🚀 Деплой</button>
             </div>
             
             <details style="margin-top: 15px;">
-                <summary style="cursor: pointer; color: #667eea; font-weight: 600;">ℹ️ Примеры использования</summary>
+                <summary style="cursor: pointer; color: #667eea; font-weight: 600;">ℹ️ Инструкции для BotHost</summary>
                 <div style="margin-top: 10px; padding: 10px; background: white; border-radius: 5px;">
-                    <p><strong>Название:</strong> my-telegram-bot</p>
-                    <p><strong>URL:</strong> https://github.com/username/repo.git</p>
-                    <p><strong>Branch:</strong> main (или master, develop)</p>
+                    <p><strong>⚠️ Только GitHub:</strong> Поддерживается только GitHub репозитории</p>
+                    <p><strong>Пример URL:</strong> https://github.com/username/repo.git</p>
+                    <p><strong>Ветки:</strong> main, master, develop, etc.</p>
+                    <p><strong>Метод:</strong> HTTP API (без Git клиента)</p>
                 </div>
             </details>
         </div>
@@ -761,9 +885,6 @@ HTML_TEMPLATE = '''
     </div>
     
     <script>
-        // (Тот же JavaScript код из предыдущего примера)
-        let updateTimer;
-        
         function deployProject() {
             const projectName = document.getElementById('projectName').value.trim();
             const repoUrl = document.getElementById('repoUrl').value.trim();
@@ -774,7 +895,12 @@ HTML_TEMPLATE = '''
                 return;
             }
             
-            showStatus({info: 'Деплой начат... Пожалуйста, подождите.'});
+            if (!repoUrl.includes('github.com')) {
+                showStatus({error: 'Поддерживается только GitHub репозитории'});
+                return;
+            }
+            
+            showStatus({info: 'Деплой начат... Скачивание через HTTP API...'});
             
             const data = {
                 project_name: projectName,
@@ -812,7 +938,7 @@ HTML_TEMPLATE = '''
                         <div class="empty-state">
                             <div class="empty-state-icon">📦</div>
                             <h3>Пока нет проектов</h3>
-                            <p>Задеплойте ваш первый проект выше или через Telegram Bot</p>
+                            <p>Задеплойте GitHub репозиторий выше или через Telegram Bot</p>
                         </div>
                     `;
                     return;
@@ -827,7 +953,6 @@ HTML_TEMPLATE = '''
                         ${info.last_update ? `<p><strong>🕐 Обновлено:</strong> ${info.last_update}</p>` : ''}
                         <div class="project-actions">
                             <button onclick="updateProject('${name}')" class="btn-success">🔄 Обновить</button>
-                            <button onclick="restartProject('${name}')" class="btn-info">▶️ Перезапуск</button>
                             <button onclick="viewProject('${name}')" class="btn-info">👁️ Просмотр</button>
                             <button onclick="deleteProject('${name}')" class="btn-danger">🗑️ Удалить</button>
                         </div>
@@ -842,20 +967,13 @@ HTML_TEMPLATE = '''
         }
         
         function updateProject(name) {
-            showStatus({info: `Обновление ${name}...`});
+            showStatus({info: `Обновление ${name} через HTTP API...`});
             fetch(`/api/update/${name}`, {method: 'POST'})
             .then(r => r.json())
             .then(data => {
                 showStatus(data);
                 loadProjects();
             });
-        }
-        
-        function restartProject(name) {
-            showStatus({info: `Перезапуск ${name}...`});
-            fetch(`/api/restart/${name}`, {method: 'POST'})
-            .then(r => r.json())
-            .then(showStatus);
         }
         
         function viewProject(name) {
@@ -936,8 +1054,6 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-# === FLASK ROUTES (те же что и раньше, но сокращенно) ===
-
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -953,21 +1069,24 @@ def api_deploy():
         if not repo_url or not project_name:
             return jsonify({"error": "Не указаны repo_url и project_name"}), 400
         
+        if "github.com" not in repo_url:
+            return jsonify({"error": "Поддерживается только GitHub"}), 400
+        
         project_path = os.path.join(PROJECTS_DIR, project_name)
         
         if os.path.exists(project_path):
             log_action(f"WEB: Обновление проекта: {project_name}")
-            repo = git.Repo(project_path)
-            origin = repo.remotes.origin
-            origin.pull()
+            download_repo_from_github(repo_url, branch, project_path)
             action = "обновлен"
         else:
             log_action(f"WEB: Клонирование проекта: {project_name}")
-            git.Repo.clone_from(repo_url, project_path, branch=branch)
+            os.makedirs(project_path, exist_ok=True)
+            download_repo_from_github(repo_url, branch, project_path)
             action = "задеплоен"
         
         req_file = os.path.join(project_path, 'requirements.txt')
         if os.path.exists(req_file):
+            log_action(f"Установка зависимостей для {project_name}")
             subprocess.run(['pip', 'install', '-r', req_file])
         
         config = load_config()
@@ -983,7 +1102,7 @@ def api_deploy():
             "status": "success",
             "action": action,
             "project": project_name,
-            "message": f"Проект {project_name} успешно {action}!"
+            "message": f"Проект {project_name} успешно {action} через HTTP API!"
         })
     
     except Exception as e:
@@ -1005,12 +1124,12 @@ def api_update(name):
         
         project = config['projects'][name]
         project_path = project['path']
+        repo_url = project['repo_url']
+        branch = project['branch']
         
         log_action(f"WEB: Обновление проекта: {name}")
         
-        repo = git.Repo(project_path)
-        origin = repo.remotes.origin
-        origin.pull()
+        download_repo_from_github(repo_url, branch, project_path)
         
         req_file = os.path.join(project_path, 'requirements.txt')
         if os.path.exists(req_file):
@@ -1022,16 +1141,12 @@ def api_update(name):
         return jsonify({
             "status": "success",
             "project": name,
-            "message": f"Проект {name} обновлен!"
+            "message": f"Проект {name} обновлен через HTTP API!"
         })
     
     except Exception as e:
         log_action(f"ОШИБКА WEB обновления {name}: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-@app.route('/api/restart/<name>', methods=['POST'])
-def api_restart(name):
-    return jsonify({"status": "info", "message": f"Перезапуск {name} (функция в разработке)"})
 
 @app.route('/api/project/<name>/info')
 def api_project_info(name):
@@ -1093,8 +1208,7 @@ def webhook():
         for name, project in config['projects'].items():
             if project['repo_url'] == repo_url:
                 log_action(f"GitHub Webhook: обновление {name}")
-                repo = git.Repo(project['path'])
-                repo.remotes.origin.pull()
+                download_repo_from_github(repo_url, project['branch'], project['path'])
                 
                 config['projects'][name]['last_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 save_config(config)
@@ -1115,7 +1229,7 @@ def run_flask():
 
 async def run_bot():
     """Запуск Telegram бота"""
-    log_action("🤖 Telegram Bot запущен")
+    log_action("🤖 Telegram Bot запущен (BotHost compatible)")
     await dp.start_polling(bot)
 
 def start_bot_in_thread():
@@ -1123,7 +1237,7 @@ def start_bot_in_thread():
     asyncio.run(run_bot())
 
 if __name__ == '__main__':
-    log_action("🚀 Deploy Manager Pro + Telegram Bot запущен")
+    log_action("🚀 Deploy Manager Pro BotHost v2.0 запущен")
     
     # Запускаем Telegram бота в отдельном потоке
     bot_thread = threading.Thread(target=start_bot_in_thread)
