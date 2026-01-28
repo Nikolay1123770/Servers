@@ -118,16 +118,6 @@ def download_repo_from_github(repo_url, branch="main", target_dir=None):
         log_action(f"ОШИБКА скачивания репозитория: {str(e)}")
         raise e
 
-def parse_github_url(url):
-    """Извлечение информации из GitHub URL"""
-    try:
-        if "github.com" in url:
-            parts = url.replace("https://github.com/", "").replace(".git", "").split("/")
-            return parts[0], parts[1]  # username, repo
-        return None, None
-    except:
-        return None, None
-
 # === ФУНКЦИИ КОНФИГУРАЦИИ ===
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -161,7 +151,7 @@ async def cmd_start(message: types.Message):
     keyboard.add(
         InlineKeyboardButton(text="📦 Мои проекты", callback_data="list_projects"),
         InlineKeyboardButton(text="🚀 Деплой проекта", callback_data="deploy_start"),
-        InlineKeyboardButton(text="🌐 Открыть веб-панель", url="https://server.bothost.py"),
+        InlineKeyboardButton(text="🌐 Веб-панель", url="https://server.bothost.py"),
         InlineKeyboardButton(text="📊 Статистика", callback_data="stats"),
         InlineKeyboardButton(text="📋 Логи", callback_data="logs")
     )
@@ -518,7 +508,7 @@ async def show_stats(callback: CallbackQuery):
         f"🕐 <b>Текущее время:</b> {datetime.now().strftime('%H:%M:%S')}\n"
         f"📅 <b>Дата:</b> {datetime.now().strftime('%d.%m.%Y')}\n\n"
         f"🌐 <b>Веб-панель:</b> server.bothost.py\n"
-        f"💡 <b>Версия:</b> BotHost Compatible v2.0\n"
+        f"💡 <b>Версия:</b> BotHost Compatible v3.0\n"
         f"🔧 <b>Метод:</b> HTTP API (без Git)",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
@@ -578,7 +568,7 @@ async def back_to_main(callback: CallbackQuery):
     keyboard.add(
         InlineKeyboardButton(text="📦 Мои проекты", callback_data="list_projects"),
         InlineKeyboardButton(text="🚀 Деплой проекта", callback_data="deploy_start"),
-        InlineKeyboardButton(text="🌐 Открыть веб-панель", url="https://server.bothost.py"),
+        InlineKeyboardButton(text="🌐 Веб-панель", url="https://server.bothost.py"),
         InlineKeyboardButton(text="📊 Статистика", callback_data="stats"),
         InlineKeyboardButton(text="📋 Логи", callback_data="logs")
     )
@@ -587,7 +577,7 @@ async def back_to_main(callback: CallbackQuery):
     await callback.message.edit_text(
         "🚀 <b>Deploy Manager Pro</b>\n\n"
         "Добро пожаловать в систему управления деплоем!\n"
-        "✅ BotHost совместимая версия\n"
+        "✅ BotHost совместимая версия v3.0\n"
         "✅ Работает без Git через HTTP API\n\n"
         "Выберите действие:",
         parse_mode="HTML",
@@ -602,7 +592,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deploy Manager Pro - BotHost</title>
+    <title>Deploy Manager Pro - BotHost v3.0</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -635,14 +625,6 @@ HTML_TEMPLATE = '''
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 20px;
-            text-align: center;
-        }
-        .telegram-info {
-            background: linear-gradient(135deg, #0088cc 0%, #005f8a 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
             text-align: center;
         }
         .section {
@@ -818,18 +800,12 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div class="container">
-        <h1>🚀 Deploy Manager Pro</h1>
+        <h1>🚀 Deploy Manager Pro v3.0</h1>
         <p class="subtitle">Управление деплоем проектов на BotHost</p>
         
         <div class="bothost-info">
-            <h3>✅ BotHost Compatible Version</h3>
-            <p>Работает без Git через HTTP API • Совместимо с ограничениями BotHost</p>
-        </div>
-        
-        <div class="telegram-info">
-            <h3>📱 Telegram Bot доступен!</h3>
-            <p>Управляйте деплоем через Telegram</p>
-            <p>Команды: /start - главное меню</p>
+            <h3>✅ BotHost Compatible v3.0</h3>
+            <p>🔧 Исправлена проблема с потоками • 🌐 HTTP API • ⚡ Стабильная работа</p>
         </div>
         
         <div class="stats">
@@ -842,8 +818,8 @@ HTML_TEMPLATE = '''
                 <div class="stat-label">Последнее обновление</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">🌐</div>
-                <div class="stat-label">HTTP API</div>
+                <div class="stat-number">🤖</div>
+                <div class="stat-label">Telegram Bot</div>
             </div>
         </div>
         
@@ -863,6 +839,7 @@ HTML_TEMPLATE = '''
                     <p><strong>Пример URL:</strong> https://github.com/username/repo.git</p>
                     <p><strong>Ветки:</strong> main, master, develop, etc.</p>
                     <p><strong>Метод:</strong> HTTP API (без Git клиента)</p>
+                    <p><strong>Telegram:</strong> Отправьте /start боту для управления</p>
                 </div>
             </details>
         </div>
@@ -1220,29 +1197,29 @@ def webhook():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ЗАПУСК ПРИЛОЖЕНИЯ ===
+# === ЗАПУСК ПРИЛОЖЕНИЯ (ИСПРАВЛЕННЫЙ) ===
 
 def run_flask():
-    """Запуск Flask сервера"""
+    """Запуск Flask сервера в отдельном потоке"""
     log_action("🌐 Flask сервер запущен на server.bothost.py:8080")
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
 
-async def run_bot():
-    """Запуск Telegram бота"""
-    log_action("🤖 Telegram Bot запущен (BotHost compatible)")
+async def main():
+    """Основная функция - запускает и Flask и Telegram Bot"""
+    log_action("🚀 Deploy Manager Pro BotHost v3.0 запущен")
+    
+    # Запускаем Flask сервер в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    # Ждём немного чтобы Flask запустился
+    await asyncio.sleep(2)
+    
+    # Запускаем Telegram бота в основном потоке
+    log_action("🤖 Telegram Bot запущен (main thread)")
     await dp.start_polling(bot)
 
-def start_bot_in_thread():
-    """Запуск бота в отдельном потоке"""
-    asyncio.run(run_bot())
-
 if __name__ == '__main__':
-    log_action("🚀 Deploy Manager Pro BotHost v2.0 запущен")
-    
-    # Запускаем Telegram бота в отдельном потоке
-    bot_thread = threading.Thread(target=start_bot_in_thread)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # Запускаем Flask сервер в главном потоке
-    run_flask()
+    # Запускаем всё через asyncio.run()
+    asyncio.run(main())
