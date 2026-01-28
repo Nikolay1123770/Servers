@@ -25,7 +25,7 @@ app = Flask(__name__)
 PROJECTS_DIR = "/app/projects"
 CONFIG_FILE = "/app/config/config.json"
 LOG_FILE = "/app/config/deploy.log"
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7966969765:AAEZLNOFRmv2hPJ8fQaE3u2KSPsoxreDn-E')  # Ваш токен
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8035930401:AAHU8hSEUc1pCav8-_GOHWkWLPC5yXR5FRc')  # Ваш токен
 ADMIN_IDS = [8473513085]  # Ваш Telegram ID
 
 # Создаём директории
@@ -1201,7 +1201,7 @@ def webhook():
 
 def run_flask():
     """Запуск Flask сервера в отдельном потоке"""
-    log_action("🌐 Flask сервер запущен на server.bothost.py:8080")
+    log_action("🌐 Flask сервер запущен на server.bothost.ru:8080")
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
 
 async def main():
