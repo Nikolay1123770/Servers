@@ -26,7 +26,7 @@ PROJECTS_DIR = "/app/projects"
 CONFIG_FILE = "/app/config/config.json"
 LOG_FILE = "/app/config/deploy.log"
 BOT_TOKEN = os.getenv('BOT_TOKEN', '7966969765:AAEZLNOFRmv2hPJ8fQaE3u2KSPsoxreDn-E')  # Ваш токен
-ADMIN_IDS = [1769269442]  # Ваш Telegram ID
+ADMIN_IDS = [8473513085]  # Ваш Telegram ID
 
 # Создаём директории
 os.makedirs(PROJECTS_DIR, exist_ok=True)
